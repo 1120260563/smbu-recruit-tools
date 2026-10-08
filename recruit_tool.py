@@ -228,6 +228,98 @@ def cmd_validate(args):
 
 
 # ---------------------------------------------------------------------------
+# 需求3：统计与导出
+# ---------------------------------------------------------------------------
+def stats_by_first_choice(clean_rows):
+    """按第一志愿分组统计人数，返回 OrderedDict（人数降序，"未填"放最后）。"""
+    counter = {}
+    for r in clean_rows:
+        v = r["志愿1"] or "未填"
+        counter[v] = counter.get(v, 0) + 1
+    ordered = OrderedDict(
+        sorted(
+            ((k, n) for k, n in counter.items() if k != "未填"),
+            key=lambda x: -x[1],
+        )
+    )
+    if "未填" in counter:
+        ordered["未填"] = counter["未填"]
+    return ordered
+
+
+def volunteer_fill_stats(clean_rows):
+    """统计志愿填写情况，返回 OrderedDict。"""
+    both = only1 = only2 = neither = 0
+    for r in clean_rows:
+        has1 = bool(r["志愿1"])
+        has2 = bool(r["志愿2"])
+        if has1 and has2:
+            both += 1
+        elif has1:
+            only1 += 1
+        elif has2:
+            only2 += 1
+        else:
+            neither += 1
+    return OrderedDict([
+        ("两个志愿都填", both),
+        ("只填第一志愿", only1),
+        ("只填第二志愿", only2),
+        ("两个志愿都没填", neither),
+    ])
+
+
+def cmd_stats(args):
+    rows, row_numbers = load_csv(args.input)
+    clean, problems = validate_rows(rows, row_numbers)
+
+    # 1) 导出清洗后的干净数据
+    clean_records = [r for _, r in clean]
+    clean_path = os.path.join(args.outdir, "清洗后报名表.csv")
+    write_csv_rows(clean_path, REQUIRED_COLUMNS, clean_records)
+
+    # 2) 按第一志愿分组统计
+    choice_stats = stats_by_first_choice(clean_records)
+    choice_path = os.path.join(args.outdir, "第一志愿统计.csv")
+    write_csv_rows(
+        choice_path, ["第一志愿", "人数"],
+        [{"第一志愿": k, "人数": n} for k, n in choice_stats.items()],
+    )
+
+    # 3) 志愿填写情况
+    fill_stats = volunteer_fill_stats(clean_records)
+    fill_path = os.path.join(args.outdir, "志愿填写情况.csv")
+    write_csv_rows(
+        fill_path, ["类别", "人数"],
+        [{"类别": k, "人数": n} for k, n in fill_stats.items()],
+    )
+
+    # —— 控制台输出 ——
+    print("=" * 60)
+    print("统计与导出")
+    print("=" * 60)
+    print("数据文件：%s" % args.input)
+    print("原始行数：%d 行 | 问题行 %d 行 | 清洗后 %d 行"
+          % (len(rows), len(problems), len(clean_records)))
+    print()
+    print("按第一志愿分组统计（基于清洗后数据）：")
+    for k, n in choice_stats.items():
+        pct = (n / len(clean_records) * 100) if clean_records else 0
+        print("  %-8s : %3d 人（%5.1f%%）" % (k, n, pct))
+    print()
+    print("志愿填写情况：")
+    for k, n in fill_stats.items():
+        print("  %s : %d 人" % (k, n))
+    print()
+    print("已导出：")
+    print("  清洗后干净数据 -> %s" % clean_path)
+    print("  第一志愿汇总表 -> %s" % choice_path)
+    print("  志愿填写情况表 -> %s" % fill_path)
+    print("=" * 60)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # 入口
 # ---------------------------------------------------------------------------
 def build_parser():
@@ -245,6 +337,11 @@ def build_parser():
     p.add_argument("--input", required=True, help="报名表 CSV 文件路径")
     p.add_argument("--outdir", default="data/output", help="输出目录（默认 data/output）")
     p.set_defaults(func=cmd_validate)
+
+    p = sub.add_parser("stats", help="需求3：统计与导出清洗后数据")
+    p.add_argument("--input", required=True, help="报名表 CSV 文件路径")
+    p.add_argument("--outdir", default="data/output", help="输出目录（默认 data/output）")
+    p.set_defaults(func=cmd_stats)
 
     return parser
 

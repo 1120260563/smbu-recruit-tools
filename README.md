@@ -6,7 +6,7 @@
 > 按三个需求分三次 PR 迭代开发：
 > - PR #1：读入与概览（已完成）
 > - PR #2：校验与清洗 —— 问题清单导出（已完成）
-> - PR #3：统计与导出 —— 按志愿分组统计、导出清洗后数据（待开发）
+> - PR #3：统计与导出 —— 按志愿分组统计、导出清洗后数据（已完成）
 
 ---
 
@@ -98,5 +98,90 @@ python recruit_tool.py validate --input <报名表CSV路径> [--outdir data/outp
    故「清洗后数据」不含任何重复学号。
 5. **空白处理**：同需求1，字段去除首尾空白后再校验。
 6. **不修改原文件**：问题行单独导出，原 CSV 保持不变。
+
+---
+
+## 需求3：统计与导出
+
+基于需求2的清洗结果（已剔除问题行），进行统计并导出清洗后的干净数据。
+
+```bash
+python recruit_tool.py stats --input <报名表CSV路径> [--outdir data/output]
+```
+
+该命令会内部执行校验（复用需求2规则）得到清洗后数据，再统计并导出。
+
+### 输出文件
+
+| 文件 | 内容 |
+| --- | --- |
+| `data/output/清洗后报名表.csv` | 通过校验的干净数据（六列原样导出） |
+| `data/output/第一志愿统计.csv` | 按第一志愿分组的人数汇总（人数降序，「未填」置末） |
+| `data/output/志愿填写情况.csv` | 两志愿都填 / 只填第一 / 只填第二 / 都没填 的人数 |
+
+### 统计说明与假设（需求3）
+
+1. **统计基于清洗后数据**：先按需求2规则剔除问题行，再统计；问题行不参与统计。
+2. **按第一志愿分组**：以 `志愿1` 为分组键；`志愿1` 为空的归入「未填」组并置于汇总表末尾。
+3. **志愿填写情况四类**：
+   - 两个志愿都填：`志愿1` 与 `志愿2` 均非空
+   - 只填第一志愿：仅 `志愿1` 非空
+   - 只填第二志愿：仅 `志愿2` 非空
+   - 两个志愿都没填：两者均为空
+4. **导出编码**：输出 CSV 均为 UTF-8 with BOM，Excel 直接打开不乱码。
+
+---
+
+## 目录结构
+
+```
+smbu-recruit-tools/
+├── README.md
+├── recruit_tool.py              # 主入口（overview / validate / stats 三个子命令）
+├── scripts/
+│   └── make_sample_data.py      # 模拟报名数据生成器（固定种子，可复现）
+├── data/
+│   ├── raw/
+│   │   └── 2026-recruit-signup.csv   # 模拟报名数据（312 行，含各类问题行）
+│   └── output/                  # 运行时输出（已 gitignore，不入库）
+│       ├── 问题清单.csv
+│       ├── 清洗后报名表.csv
+│       ├── 第一志愿统计.csv
+│       └── 志愿填写情况.csv
+└── tests/
+    ├── test_overview.py         # 需求1 测试
+    ├── test_validate.py         # 需求2 测试
+    └── test_stats.py            # 需求3 测试
+```
+
+## 测试
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## 完整使用流程
+
+```bash
+# 1) 概览：先看数据全貌
+python recruit_tool.py overview --input data/raw/2026-recruit-signup.csv
+
+# 2) 校验：导出问题清单，人工核实
+python recruit_tool.py validate --input data/raw/2026-recruit-signup.csv
+
+# 3) 统计：基于清洗后数据统计并导出
+python recruit_tool.py stats --input data/raw/2026-recruit-signup.csv
+```
+
+> 替换 `--input` 为你自己的报名表 CSV 即可；输出默认写入 `data/output/`，
+> 可用 `--outdir` 指定其他目录。
+
+## PR 与需求对应
+
+| PR | 需求 | 主要内容 |
+| --- | --- | --- |
+| PR #1 | 读入与概览 | CSV 读入、行数/各列空值/完全重复行 |
+| PR #2 | 校验与清洗 | 学号邮箱校验、重复报名检测、问题清单导出 |
+| PR #3 | 统计与导出 | 按第一志愿分组统计、志愿填写情况、清洗后数据导出 |
 
 > AI生成
